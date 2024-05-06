@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kata Cruncher</title>
+  <meta property="og:title" content="Kata Cruncher">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://stellartux.github.io/random/kata-cruncher/">
+  <meta property="og:locale" content="en_GB">
+  <meta name="description" property="og:description" content="CodeWars kata automatic translator.">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#444444">
+  <style>
+    :root {
+      color-scheme: dark light;
+    }
+
+    html,
+    body {
+      min-height: 90vh;
+      margin: auto;
+      padding: 0.3vw 0.5vw;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 50% 50%;
+      height: 99%;
+      width: 100%;
+      gap: 4px;
+    }
+
+    textarea {
+      height: calc(99vh - 6em);
+    }
+
+    select {
+      max-height: 2rem;
+    }
+
+    *:invalid {
+      outline-color: orangered;
+      outline-style: dashed;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <textarea id="input" spellcheck="false">
+describe("the function", function(){
+  it("should do the thing", () => {
+    assert.strictEqual(myFunction(2, 1), 3)
+    Test.assertEqual(myFunction(1, 2), 4)
+    assert.strictEqual(myFunction(2, 2), 6)
+    let a = 3, b = 4
+    assert.strictEqual(myFunction(a, b), (a + 1) * b)
+    assert.throws(myFunction(1, 'potato'))
+    assert.deepEquals({ a: 1 }, { a: 1 })
+  })
+})
+
+    </textarea>
+    <textarea id="output" spellcheck="false">Some text</textarea>
+    <select id="from" disabled>
+      <option>JavaScript</option>
+    </select>
+    <select id="to">
+    </select>
+    <div></div>
+    <div><label>Show preamble: <input id="show-preamble" type="checkbox" checked /></label></div>
+    <button id="convert">Convert Clipboard</button><button id="copy">Copy</button>
+  </main>
+  <script type="module">
+    import { AbandonError, from, languages } from './kata-cruncher.js'
+
+    /** @type {HTMLTextAreaElement} */
+    const input = document.getElementById('input')
+    /** @type {HTMLTextAreaElement} */
+    const output = document.getElementById('output')
+    /** @type {HTMLSelectElement} */
+    const inputLanguage = document.getElementById('from')
+    /** @type {HTMLSelectElement} */
+    const outputLanguage = document.getElementById('to')
+    /** @type {HTMLInputElement} */
+    const showPreamble = document.getElementById('show-preamble')
+
+    for (const key in languages) {
+      const option = document.createElement('option')
+      option.value = key
+      option.innerText = key
+      outputLanguage.appendChild(option)
+    }
+
+    function count(target, xs) {
+      let result = 0
+      for (const x of xs) {
+        if (x === target) {
+          result++
+        }
+      }
+      return result
+    }
+
+    function debounce(fn, delay = 200) {
+      let debounceRef
+      return (...xs) => {
+        if (debounceRef) clearTimeout(debounceRef)
+        debounceRef = setTimeout(fn, delay, ...xs)
+      }
+    }
+
+    function convertCode() {
+      try {
+        input.setCustomValidity('')
+        output.setCustomValidity('')
+        output.value = convert(input.value, {
+          inputLanguage: inputLanguage.value,
+          outputLanguage: outputLanguage.value,
+          showPreamble: showPreamble.checked
+        })
+        return output.value
+      } catch (error) {
+        if (error instanceof AbandonError) {
+          console.error(error.message)
+          output.setCustomValidity('invalid')
+        } else if (error instanceof SyntaxError) {
+          console.error(error.message)
+          input.setCustomValidity('invalid')
+        } else {
+          output.setCustomValidity('invalid')
+          throw error
+        }
+      }
+    }
+
+    const onInput = debounce(convertCode)
+
+    input.addEventListener('input', onInput)
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Tab') {
+        event.preventDefault()
+        const { shiftKey, srcElement } = event
+        let { selectionStart, selectionEnd, value } = srcElement
+        const start = value.lastIndexOf('\n', selectionStart - 1) + 1
+        const end = value.indexOf('\n', selectionEnd)
+        const prelude = value.slice(0, start)
+        const selection = value.slice(start, end)
+        const postlude = value.slice(end)
+        let indent = count('\n', selection) + 1
+        if (shiftKey) {
+          srcElement.value = prelude + selection.replace(/(?<=^|\n)  /g, '') + postlude
+          srcElement.selectionEnd = selectionEnd - 2 * indent
+          srcElement.selectionStart = Math.max(selectionStart - 2 * indent, start)
+        } else {
+          srcElement.value = prelude + selection.replace(/(?<=^|\n)/g, '  ') + postlude
+          srcElement.selectionEnd = selectionEnd + 2 * indent
+          srcElement.selectionStart = selectionStart + 2 * indent
+        }
+      }
+    })
+    inputLanguage.addEventListener('change', onInput)
+    outputLanguage.addEventListener('change', onInput)
+    showPreamble.addEventListener('change', onInput)
+    onInput()
+
+    document.getElementById('copy').addEventListener('click', () => {
+      navigator.clipboard.writeText(output.value)
+    })
+
+    document.getElementById('convert').addEventListener('click', async () => {
+      input.value = await navigator.clipboard.readText()
+      navigator.clipboard.writeText(convertCode())
+    })
+
+    window.addEventListener('load', () => {
+      for (const [id, value] of Object.entries(JSON.parse(localStorage.getItem('kata-cruncher')))) {
+        document.getElementById(id)[typeof value === 'boolean' ? 'checked' : 'value'] = value
+      }
+      for (const [id, value] of new URLSearchParams(location.search)) {
+        const el = document.getElementById(id)
+        if (el?.options && [...el.options].map(option => option.value).includes(value)) {
+          el.value = value
+        }
+      }
+    })
+
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        const data = {}
+        for (const el of document.querySelectorAll('[id]')) {
+          if (el.id === 'output') {
+            continue
+          } else if (el.type === 'checkbox') {
+            data[el.id] = el.checked
+          } else if (el.value) {
+            data[el.id] = el.value
+          }
+          window.localStorage.setItem('kata-cruncher', JSON.stringify(data))
+        }
+      }
+    })
+
+    function normalize(ast) {
+      switch (ast?.type) {
+        case 'ArrowFunctionExpression':
+        case 'FunctionExpression':
+          normalize(ast.id)
+          ast.params.forEach(normalize)
+          normalize(ast.body)
+          break
+
+        case 'AssignmentExpression':
+        case 'BinaryExpression':
+          normalize(ast.left)
+          normalize(ast.right)
+          break
+
+        case 'BlockStatement':
+        case 'Program':
+          ast.body.forEach(normalize)
+          break
+
+        case 'CallExpression':
+          if (ast.callee.object?.name === 'Test') {
+            if (ast.callee.property.name === 'expect' &&
+              ast.arguments[0].type === 'BinaryExpression' &&
+              (ast.arguments[0].operator === '==' || ast.arguments[0].operator === '===')
+            ) {
+              ast.callee.object.name = 'assert'
+              const { left, right } = ast.arguments.shift()
+              if (right.type === 'Literal' && typeof right.value === 'boolean') {
+                ast.callee.property.name = right.value ? 'isTrue' : 'isFalse'
+                ast.arguments.unshift(left)
+              } else {
+                ast.callee.property.name = ast.arguments[0].operator === '==' ? 'equal' : 'strictEqual'
+                ast.arguments.unshift(left, right)
+              }
+            } else if (ast.callee.property.name === 'assert_equals') {
+              ast.callee.object.name = 'assert'
+              ast.callee.property.name = 'strictEqual'
+            }
+          }
+          normalize(ast.callee)
+          ast.arguments.forEach(normalize)
+          break
+
+        case 'ExpressionStatement':
+          normalize(ast.expression)
+          break
+
+        case 'Identifier':
+          if (/assert[-_ ]?Equals?/i.test(ast.name)) {
+            ast.type = 'MemberExpression'
+            ast.object = { name: 'assert', type: 'Identifier', start: ast.start, end: ast.end }
+            ast.property = { name: 'deepEqual', type: 'Identifier', start: ast.start, end: ast.end }
+            ast.optional = false
+            ast.computed = false
+            delete ast.name
+          }
+          break
+
+        case 'IfStatement':
+          normalize(ast.test)
+          normalize(ast.consequent)
+          normalize(ast.alternate)
+          break
+
+        case 'MemberExpression':
+          if (ast.object.name === 'assert') {
+            switch (ast.property.name) {
+              case 'deepEqual':
+              case 'deepEquals':
+                ast.property.name = 'deepEqual'
+                break
+
+              case 'equal':
+              case 'equals':
+                ast.property.name = 'equal'
+                break
+
+              case 'strictEqual':
+              case 'strictEquals':
+                ast.property.name = 'strictEqual'
+                break
+
+              case 'throws':
+                break
+
+              default:
+                console.log('normalize::assert')
+                console.dir(ast)
+            }
+          } else if (ast.object.name === 'Test') {
+            if (ast.property.name === 'expect') {
+              ast.type = 'Identifier'
+              ast.name = 'assert'
+              ast.end = ast.property.end
+              delete ast.computed
+              delete ast.object
+              delete ast.optional
+              delete ast.property
+            } else if (/assert_?((deep|strict)?_?equals?|similar)/i.test(ast.property.name)) {
+              ast.object.name = 'assert'
+              ast.property.name =
+                /similar|deep/i.test(ast.property.name) ? 'deepEqual' : 'strictEqual'
+              normalize(ast)
+            }
+          } else {
+            normalize(ast.object)
+            normalize(ast.property)
+          }
+          break
+
+        case 'ObjectExpression':
+          ast.properties.forEach(normalize)
+          break
+
+        case 'Property':
+          normalize(ast.key)
+          normalize(ast.value)
+          break
+
+        case 'VariableDeclaration':
+          ast.declarations.forEach(normalize)
+          break
+
+        case 'VariableDeclarator':
+          normalize(ast.id)
+          normalize(ast.init)
+          break
+
+        default:
+        // console.warn('normalize::Unimplemented:' + ast.type)
+        // console.dir(ast)
+        case 'Literal':
+      }
+      return ast
+    }
+
+    const preamble = {
+      C: '#include <criterion/criterion.h>\n\n',
+      Clojure: '(ns solution-test\n  (:require [clojure.test :refer :all]\n            [solution :refer [solution]]))\n\n',
+      'Common Lisp': '(in-package #:cl-user)\n(defpackage #:challenge/tests/solution\n(:use #:cl #:rove #:challenge/solution))\n(in-package #:challenge/tests/solution)\n(defun displayln (s) (prin1 s) (terpri))\n\n',
+      Haskell: 'module SolutionSpec (spec) where\n\nimport Solution (solution)\nimport Test.Hspec\n\n',
+      Java: 'import org.junit.Test;\nimport static org.junit.Assert.*;\n\n',
+      JavaScript: "const { assert } = require('chai')\n\n",
+      Julia: 'using FactCheck\n\n',
+      Lua: 'local SOLUTION = require "solution"\n\n',
+      Python: 'import codewars_test as test\nfrom solution import SOLUTION\n\n',
+      TypeScript: 'import { assert } from "chai";\nimport { SOLUTION } from "./solution";\n\n'
+    }
+
+    /**
+     * @param {string} input
+     * @param {object|string} [options] or `options.outputLanguage`
+     * @param {string} [options.outputLanguage='JavaScript'] 'JavaScript' by default
+     * @param {string} [options.showPreamble=false] 'false' by default
+     * @returns {string}
+     */
+    function convert(input, options) {
+      const {
+        inputLanguage = 'JavaScript',
+        outputLanguage = 'JavaScript',
+        showPreamble = false,
+      } = typeof (options) === 'object' ? options : { outputLanguage: options }
+      return (showPreamble && preamble[outputLanguage] || '') +
+        languages[outputLanguage].toCode(normalize(from[inputLanguage](input.replace(/should works for/g, 'should work for')))).replace(/^\s+/g, '')
+    }
+
+  </script>
+</body>
+
+</html>
