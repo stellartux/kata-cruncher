@@ -23,7 +23,7 @@ Deno.test('Simple kata - Lua', function () {
   assertEquals(languages.Lua.toCode(input), trim`
 describe("the function", function ()
     it("should do the thing", function ()
-        assert.equal(3, myFunction(2, 1))
+        assert.equal(3, my_function(2, 1), "my_function(2, 1)")
     end)
 end)
 `)

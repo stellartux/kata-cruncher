@@ -346,9 +346,10 @@ describe("the function", function(){
       'Common Lisp': '(in-package #:cl-user)\n(defpackage #:challenge/tests/solution\n(:use #:cl #:rove #:challenge/solution))\n(in-package #:challenge/tests/solution)\n(defun displayln (s) (prin1 s) (terpri))\n\n',
       Haskell: 'module SolutionSpec (spec) where\n\nimport Solution (solution)\nimport Test.Hspec\n\n',
       Java: 'import org.junit.Test;\nimport static org.junit.Assert.*;\n\n',
-      JavaScript: "const { assert } = require('chai')\n\n",
+      JavaScript: "const { assert, config } = require('chai')\nconfig.truncateThreshold = 0\n\n",
       Julia: 'using FactCheck\n\n',
       Lua: 'local SOLUTION = require "solution"\n\n',
+      Prolog: '% :- include(preloaded).\n',
       Python: 'import codewars_test as test\nfrom solution import SOLUTION\n\n',
       TypeScript: 'import { assert } from "chai";\nimport { SOLUTION } from "./solution";\n\n'
     }

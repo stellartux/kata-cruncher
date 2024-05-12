@@ -1134,6 +1134,19 @@ const JavaScript = {
   BreakStatement({ label }, i) {
     return this.indent(i) + 'break' + (label ? ' ' + label.name : '') + this.statementTerminator
   },
+  CallExpression(ast, i) {
+    if (ast.arguments.length === 2 && isAssertEqual(ast.callee) ||
+      ast.arguments.length === 1 && matchTerm(ast.callee, 'assert.isTrue', 'assert.isFalse')
+    ) {
+      const value = this.toCode(ast.arguments[0])
+      ast.arguments.push({
+        raw: "'" + value.replaceAll('\\', '\\\\') + "'",
+        value,
+        type: 'Literal',
+      })
+    }
+    return generics.CallExpression.call(this, ast, i)
+  },
   ChainExpression({ expression }, i) {
     return this.MemberExpression(expression, i, '?.')
   },
@@ -1588,7 +1601,7 @@ ${this.indent(i)}end\n`
       const { key, value } = ast
       let name = this.toCode(key)
       let result = `${this.indent(i)}function `
-      if (name === 'tostring') {
+      if (/to_?string/i.test(name)) {
         result += `Base.print(io::IO, self::${type})\n`
         for (const stmt of value.body.body) {
           if (stmt.type === 'ReturnStatement') {
@@ -1599,11 +1612,11 @@ ${this.indent(i)}end\n`
         }
         result += `${this.indent(i)}end\n`
       } else {
-        const params = [...value.params.map(this.toCode.bind(this))]
+        const params = [...value.params.map((x) => this.toCode(x) + ',')]
         if (!ast.static) {
           params.unshift(`self::${type}`)
         }
-        result += `${name}(${params.join(', ')})${this.toCode(value.body, i, "")}\n`
+        result += name + '(' + params.join(' ') + ')' + this.toCode(value.body, i, "") + '\n'
       }
       return result
     }
@@ -1805,6 +1818,14 @@ const Lua = {
         }
       } else if (property.name === 'toString') {
         return `tostring(${this.toCode(object)})`
+      } else if (property.name === 'push' && ast.arguments.length === 1) {
+        return 'table.insert(' + this.toCode(object) + ', ' + this.toCode(arguments[0]) + ')'
+      } else if (property.name === 'pop') {
+        return 'table.remove(' + this.toCode(object) + ')'
+      } else if (property.name === 'unshift' && ast.arguments.length === 1) {
+        return 'table.insert(' + this.toCode(object) + ', 1, ' + this.toCode(arguments[0]) + ')'
+      } else if (property.name === 'shift') {
+        return 'table.remove(' + this.toCode(object) + ', 1)'
       }
     } else if (ast.callee.name === 'structuredClone') {
       return '{ table.unpack(' + this.toCode(ast.arguments[0]) + ') }'
@@ -2423,9 +2444,8 @@ const Prolog = Object.setPrototypeOf({
     const { callee } = ast
     if (matchTerm(callee, 'describe')) {
       const name = toSnakeCase(ast.arguments[0].value.replace(/^\W+|\W+$/g, ''))
-      return `% :- include(preloaded).
-:- include(${name}).
-begin_tests(${name}).
+      return `include(${name}).
+:- begin_tests(${name}).
 
 ${ast.arguments[1].body.body.map((x) => this.toCode(x)).join('\n')}
 
@@ -3296,7 +3316,7 @@ function toSnakeCase(str) {
 
 /** @param {string} str */
 function toTitleCase(str) {
-  return toWordParts(str).map(toUpperCaseFirst).join()
+  return toWordParts(str).map(toUpperCaseFirst).join('')
 }
 
 export const languages = { C, Clojure, 'Common Lisp': CommonLisp, Crystal, Forth, Haskell, Java, JavaScript, Julia, Lua, Nim, Prolog, Python, Racket, Ruby, TypeScript }

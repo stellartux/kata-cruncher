@@ -24,4 +24,5 @@
   "js/ts.implicitProjectConfig.target": "ES2020",
   "js/ts.implicitProjectConfig.strictFunctionTypes": true,
   "js/ts.implicitProjectConfig.strictNullChecks": true,
+  "liveServer.settings.port": 5501,
 }
