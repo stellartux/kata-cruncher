@@ -271,19 +271,19 @@ describe("the function", function(){
         case 'MemberExpression':
           if (ast.object.name === 'assert') {
             switch (ast.property.name) {
-              case 'deepEqual':
               case 'deepEquals':
                 ast.property.name = 'deepEqual'
+              case 'deepEqual':
                 break
 
-              case 'equal':
               case 'equals':
                 ast.property.name = 'equal'
+              case 'equal':
                 break
 
-              case 'strictEqual':
               case 'strictEquals':
                 ast.property.name = 'strictEqual'
+              case 'strictEqual':
                 break
 
               case 'throws':
@@ -302,7 +302,7 @@ describe("the function", function(){
               delete ast.object
               delete ast.optional
               delete ast.property
-            } else if (/assert_?((deep|strict)?_?equals?|similar)/i.test(ast.property.name)) {
+            } else if (/assert_?((deep_?|strict_?)?equals?|similar)/i.test(ast.property.name)) {
               ast.object.name = 'assert'
               ast.property.name =
                 /similar|deep/i.test(ast.property.name) ? 'deepEqual' : 'strictEqual'

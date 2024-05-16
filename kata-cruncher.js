@@ -105,13 +105,28 @@ function isNumericalForStatement({ init, test, type, update }) {
     init.declarations.length === 1 &&
     init.declarations[0].type === 'VariableDeclarator' &&
     test?.type === 'BinaryExpression' &&
-    (test.operator[0] === '<' || test.operator[0] === '>') &&
+    (test.operator[0] === '<' || test.operator[0] === '>' || test.operator[0] === '>=' || test.operator[0] === '<=') &&
     test.left.type === 'Identifier' &&
     test.left.name === init.declarations[0].id.name &&
     (
       update?.type === 'UpdateExpression' && update.argument.name === init.declarations[0].id.name
       || update?.type === 'AssignmentExpression' && update.left.name === init.declarations[0].id.name
     )
+}
+
+function parseNumericalForStatement({ body, init, test, update }) {
+  let direction = 1
+  if (update.type === 'AssignmentExpression') direction = update.right.value
+  if (update.operator[0] === '-') direction = -direction
+  let finalValue = test.right.value
+  if (!test.operator.endsWith('=')) finalValue -= direction
+  return {
+    direction,
+    id: init.declarations[0].id,
+    initValue: init.declarations[0].init.value,
+    finalValue,
+    body: body.body,
+  }
 }
 
 function isStringConcatenation({ operator, left, right, type }) {
@@ -253,6 +268,25 @@ function updateExpressionToAssignmentExpression({ argument, operator, prefix }) 
 }
 
 // see https://github.com/estree/estree/tree/master
+
+class Identifier {
+  type = 'Identifier'
+  /** @param {string} name */
+  constructor(name) {
+    this.name = name
+  }
+}
+
+class Literal {
+  type = 'Literal'
+  constructor(value) {
+    this.value = value
+    this.raw = value.toString()
+    if (typeof value === 'string') {
+      this.raw = "'" + this.raw + "'"
+    }
+  }
+}
 
 const generics = {
   ArrayExpression({ elements }) {
@@ -490,8 +524,8 @@ ${this.body(body.body, i, ast)}${this.blockClose(i)}`
     return this.BinaryExpression(ast, i)
   },
   MemberExpression({ computed, object, property }, i, joiner = '.') {
-    if (object.name === 'Test') {
-      return this.toCode(property, i)
+    if (object.type === 'BinaryExpression') {
+      return '(' + this.toCode(object, i) + ')' + joiner + this.toCode(property, i)
     } else if (computed) {
       return this.toCode(object, i) + (joiner === '?.[' ? joiner : '[') + this.toCode(property, i) + ']'
     } else {
@@ -805,6 +839,9 @@ const C = Object.setPrototypeOf({
       return ast.expression.arguments[1].body.body.map((it) => this.toCode(it, i, name)).join('\n')
     }
     return generics.ExpressionStatement.call(this, ast, i, ...xs)
+  },
+  ForStatement({ body, init, test, update }, i) {
+    return this.indent(i) + `for (size_t ${this.toCode(init)}; ${this.toCode(test, i)}; ${this.toCode(update, i)}) ${this.toCode(body, i)}`
   },
   functionKeyword: 'void',
   halfBlockOpener: ' {',
@@ -1188,10 +1225,10 @@ ${this.indent(i)}}
     return this.indent(i) + `for (${this.toCode(init)}; ${this.toCode(test, i)}; ${this.toCode(update, i)}) ${this.toCode(body, i)}`
   },
   ForInStatement({ body, left, right }, i) {
-    return this.indent(i) + `for (${this.toCode(left)} in ${this.toCode(right, i)}) ${this.toCode(body, i)}`
+    return this.indent(i) + `for (${this.toCode(left).replace(/;$/, '')} in ${this.toCode(right, i)}) ${this.toCode(body, i)}`
   },
   ForOfStatement({ body, left, right }, i) {
-    return this.indent(i) + `for (${this.toCode(left)} of ${this.toCode(right, i)}) ${this.toCode(body, i)}`
+    return this.indent(i) + `for (${this.toCode(left).trimEnd(/;$/, '')} of ${this.toCode(right, i)}) ${this.toCode(body, i)}`
   },
   generatorKeyword: 'function*',
   halfBlockOpener: ' {',
@@ -2423,9 +2460,15 @@ const Prolog = Object.setPrototypeOf({
     return `[${this.list(params)}] >> (${this.toCode(body, i)})`
   },
   AssignmentExpression(ast, i) {
-    // TODO typecheck, then choose between `=` or `is`
-    // TODO change A, B = 1, 2 to A = 1, B = 2
-    // const { id, left, operator, right } = ast
+    const { left, operator, right } = ast
+    if (operator === '=') {
+      if (right.type === 'MemberExpression' && right.computed) {
+        return 'nth0(' + this.toCode(right.property) + ', ' + this.toCode(right.object) +
+          ', ' + this.toCode(left) + ')'
+      } else if (right.type === 'BinaryExpression') {
+        return this.toCode(left) + ' is ' + this.toCode(right, i)
+      }
+    }
     return generics.AssignmentExpression.call(this, ast, i)
   },
   BinaryExpression(ast, ...xs) {
@@ -2545,20 +2588,31 @@ ${this.body(ast.arguments[1].body.body, i, ast)}.`
     }
     return code
   },
+  ForStatement(ast, i) {
+    if (isNumericalForStatement(ast) && ast.update.operator === '++') {
+      const { body, id, initValue, finalValue } = parseNumericalForStatement(ast)
+      let result = this.indent(i) + 'forall(between(' + this.toCode(new Literal(initValue)) +
+        ', ' + this.toCode(new Literal(finalValue)) + ', ' + this.toCode(id) + '), '
+      if (body.length === 1) {
+        let bodyStr = this.toCode(body[0])
+        if (body[0].type === 'BinaryExpression') bodyStr = '(' + bodyStr + ')'
+        result += bodyStr + ')'
+      } else {
+        result += '(\n' + this.body(body, i) + '\n' + this.indent(i) + '))'
+      }
+      if (i === 0) result = ':- ' + result + '.'
+      return result
+    }
+    abandon(ast, "Couldn't handle complex ForStatement")
+  },
   FunctionExpression(ast, i) {
-    const { async, body, generator, id, params } = ast
-    if (generator) {
-      // TODO transpile generators to backtracking predicates
-      abandon(ast, 'Generator functions not supported.')
-    }
-    if (async) {
-      console.warn('Stripping async')
-    }
+    const { async, body, id, params } = ast
+    if (async) console.warn('Stripping async')
     if (id === null) {
       return this.ArrowFunctionExpression(ast, i)
     }
     return `${toSnakeCase(this.toCode(id))}(${this.params(params)}) :-
-${this.body(body.body, i, ast)}.`
+${this.body(body.body, i, ast).replace(/;$/gm, '').replace(/;,$/gm, ';')}.`
   },
   functionKeyword: '',
   Identifier({ name }) {
@@ -2613,7 +2667,7 @@ ${this.body(body.body, i, ast)}.`
     return '_' + generics.ObjectExpression.call(this, ast, i)
   },
   params(params, i) {
-    return this.list([...params, { type: 'Identifier', name: 'result' }], i)
+    return this.list([...params, new Identifier('result')], i)
   },
   Property(ast, i) {
     const { key, value } = ast
@@ -2638,9 +2692,16 @@ ${this.body(body.body, i, ast)}.`
     return ' | ' + this.toCode(argument)
   },
   ReturnStatement({ argument }, i) {
+    if (argument.type === 'CallExpression') {
+      argument.arguments.push(new Identifier('result'))
+      return this.indent(i) + this.CallExpression(argument)
+    } else if (argument.type === 'MemberExpression' && argument.computed
+      && typeof argument.property !== 'string') {
+      return this.indent(i) + 'nth0(' + this.toCode(argument.property) + ', ' + this.toCode(argument.object) + ', Result)'
+    }
     return this.indent(i) +
       this.AssignmentExpression({
-        left: { type: 'Identifier', name: 'result' },
+        left: new Identifier('result'),
         operator: '=',
         right: argument,
       }, i)
@@ -2679,6 +2740,26 @@ ${this.body(body.body, i, ast)}.`
       return `call_cleanup(${goal}, ${this.toCode(finalizer, i)})`
     }
     return goal
+  },
+  VariableDeclaration({ declarations }, i) {
+    const result = declarations.map((x) => this.toCode(x, i)).join(',\n' + this.indent(i))
+    if (i === 0) {
+      return ':- ' + result + '.'
+    }
+    return this.indent(i) + result
+  },
+  VariableDeclarator({ id, init }, i) {
+    if (init.type === 'MemberExpression' && init.computed) {
+      return 'nth0(' + this.toCode(init.property) + ', ' + this.toCode(init.object) +
+        ', ' + this.toCode(id) + ')'
+    } else if (init.type === 'CallExpression') {
+      init.arguments.push(id)
+      return this.CallExpression(init, i)
+    }
+    return this.toCode(id) + ' = ' + this.toCode(init)
+  },
+  YieldExpression(ast) {
+    return this.ReturnStatement(ast, 0) + ';'
   },
 }, generics)
 
