@@ -68,6 +68,22 @@ describe("the function", function(){
       <option>JavaScript</option>
     </select>
     <select id="to">
+      <option>C</option>
+      <option>Clojure</option>
+      <option>Common Lisp</option>
+      <option>Crystal</option>
+      <option>Forth</option>
+      <option>Haskell</option>
+      <option>Java</option>
+      <option>JavaScript</option>
+      <option>Julia</option>
+      <option>Lua</option>
+      <option>Nim</option>
+      <option>Prolog</option>
+      <option>Python</option>
+      <option>Racket</option>
+      <option>Ruby</option>
+      <option>TypeScript</option>
     </select>
     <div></div>
     <div><label>Show preamble: <input id="show-preamble" type="checkbox" checked /></label></div>
@@ -86,13 +102,6 @@ describe("the function", function(){
     const outputLanguage = document.getElementById('to')
     /** @type {HTMLInputElement} */
     const showPreamble = document.getElementById('show-preamble')
-
-    for (const key in languages) {
-      const option = document.createElement('option')
-      option.value = key
-      option.innerText = key
-      outputLanguage.appendChild(option)
-    }
 
     function count(target, xs) {
       let result = 0
@@ -249,6 +258,13 @@ describe("the function", function(){
 
         case 'ExpressionStatement':
           normalize(ast.expression)
+          break
+
+        case 'ForStatement':
+          normalize(ast.init)
+          normalize(ast.body)
+          normalize(ast.test)
+          normalize(ast.update)
           break
 
         case 'Identifier':

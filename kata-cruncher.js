@@ -2500,7 +2500,7 @@ ${ast.arguments[1].body.body.map((x) => this.toCode(x)).join('\n')}
         const calleeName = body[0]?.expression?.arguments?.[0]?.callee?.name
         if (body.every((stmt) =>
           isAssertEqual(stmt.expression?.callee) &&
-          stmt.expression.arguments?.length === length &&
+          stmt.expression.arguments?.length >= length &&
           stmt.expression?.arguments?.[0]?.callee?.name === calleeName
         )) {
           const argCount = body[0].expression.arguments[0].arguments.length
