@@ -424,6 +424,7 @@ const generics = {
   elseKeyword: 'else',
   functionKeyword: 'function',
   FunctionExpression(ast, i, keyword = ast.id ? this.functionKeyword : this.lambdaKeyword) {
+    if (typeof keyword !== 'string') keyword = this.functionKeyword
     const { async, body, generator } = ast
     if (generator) {
       if (this.generatorKeyword) {
@@ -1222,7 +1223,9 @@ ${this.indent(i)}}
     return 'export ' + this.toCode(declaration, i)
   },
   ForStatement({ body, init, test, update }, i) {
-    return this.indent(i) + `for (${this.toCode(init)}; ${this.toCode(test, i)}; ${this.toCode(update, i)}) ${this.toCode(body, i)}`
+    let code = this.indent(i) + `for (${this.toCode(init)}; ${this.toCode(test, i)}; ${this.toCode(update, i)})`
+    code += (body.type !== 'BlockStatement') ? '\n' : ' '
+    return code + this.toCode(body, i)
   },
   ForInStatement({ body, left, right }, i) {
     return this.indent(i) + `for (${this.toCode(left).replace(/;$/, '')} in ${this.toCode(right, i)}) ${this.toCode(body, i)}`
