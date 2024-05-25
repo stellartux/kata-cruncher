@@ -357,17 +357,29 @@ describe("the function", function(){
     }
 
     const preamble = {
-      C: '#include <criterion/criterion.h>\n\n',
-      Clojure: '(ns solution-test\n  (:require [clojure.test :refer :all]\n            [solution :refer [solution]]))\n\n',
-      'Common Lisp': '(in-package #:cl-user)\n(defpackage #:challenge/tests/solution\n(:use #:cl #:rove #:challenge/solution))\n(in-package #:challenge/tests/solution)\n(defun displayln (s) (prin1 s) (terpri))\n\n',
-      Haskell: 'module SolutionSpec (spec) where\n\nimport Solution (solution)\nimport Test.Hspec\n\n',
-      Java: 'import org.junit.Test;\nimport static org.junit.Assert.*;\n\n',
-      JavaScript: "const { assert, config } = require('chai')\nconfig.truncateThreshold = 0\n\n",
-      Julia: 'using FactCheck\n\n',
-      Lua: 'local SOLUTION = require "solution"\n\n',
-      Prolog: '% :- include(preloaded).\n',
-      Python: 'import codewars_test as test\nfrom solution import SOLUTION\n\n',
-      TypeScript: 'import { assert } from "chai";\nimport { SOLUTION } from "./solution";\n\n'
+      C: (s) => '#include <criterion/criterion.h>\n\n' + s,
+      Clojure: (s) => '(ns solution-test\n  (:require [clojure.test :refer :all]\n            [solution :refer [solution]]))\n\n' + s,
+      'Common Lisp': (s) => '(in-package #:cl-user)\n(defpackage #:challenge/tests/solution\n(:use #:cl #:rove #:challenge/solution))\n(in-package #:challenge/tests/solution)\n(defun displayln (s) (prin1 s) (terpri))\n\n' + s,
+      Haskell: (s) => 'module SolutionSpec (spec) where\n\nimport Solution (solution)\nimport Test.Hspec\n\n' + s,
+      Java: (s) => 'import org.junit.Test;\nimport static org.junit.Assert.*;\n\n' + s,
+      JavaScript: (s) => {
+        if (s.includes('deepEqual')) {
+          return "const { assert, config } = require('chai')\nconfig.truncateThreshold = 0\n\n" + s
+        } else {
+          return "const { assert } = require('chai')\n\n" + s
+        }
+      },
+      Julia: (s) => 'using FactCheck\n\n' + s,
+      Lua: (s) => 'local SOLUTION = require "solution"\n\n' + s,
+      Python: (s) => 'import codewars_test as test\nfrom solution import SOLUTION\n\n' + s,
+      TypeScript: (s) => 'import { assert } from "chai";\nimport { SOLUTION } from "./solution";\n\n' + s,
+      TypeScript: (s) => {
+        if (s.includes('deepEqual')) {
+          return "import { assert, config } from \"chai\");\nconfig.truncateThreshold = 0;\n\n" + s
+        } else {
+          return "import { assert } from \"chai\");\n\n" + s
+        }
+      },
     }
 
     /**
@@ -383,8 +395,8 @@ describe("the function", function(){
         outputLanguage = 'JavaScript',
         showPreamble = false,
       } = typeof (options) === 'object' ? options : { outputLanguage: options }
-      return (showPreamble && preamble[outputLanguage] || '') +
-        languages[outputLanguage].toCode(normalize(from[inputLanguage](input.replace(/should works for/g, 'should work for')))).replace(/^\s+/g, '')
+      return (showPreamble && preamble[outputLanguage] || ((s) => s))(
+        languages[outputLanguage].toCode(normalize(from[inputLanguage](input.replace(/should works for/g, 'should work for')))).replace(/^\s+/g, ''))
     }
 
   </script>

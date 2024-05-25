@@ -587,6 +587,7 @@ ${this.body(body.body, i, ast)}${this.blockClose(i)}`
     }
     abandon(ast, 'Unimplemented: ThrowStatement')
   },
+  /** @returns {string} */
   toCode(ast, ...xs) {
     if (!ast) {
       return ''
@@ -2833,9 +2834,13 @@ const Python = Object.setPrototypeOf({
     } else if (matchTerm(ast.callee, 'describe', 'it')) {
       const arg0 = this.toCode(ast.arguments[0])
       return '@test.' + ast.callee.name + '(' + arg0 + ')\n' +
-        this.indent(i) + this.FunctionExpression({ ...ast.arguments[1], id: { name: toSnakeCase(arg0), type: 'Identifier' } }, i, 'def') + '\n'
-    } else if (isAssertTrue(ast)) {
-      return 'test.expect(' + this.list(ast.arguments) + ')'
+        this.indent(i) + this.FunctionExpression({ ...ast.arguments[1], id: new Identifier(arg0) }, i, 'def') + '\n'
+    } else if (isAssertTrue(ast.callee)) {
+      const arg0 = this.toCode(ast.arguments[0])
+      return 'test.expect(' + arg0 + ', "' + this.escapeString(arg0) + '")'
+    } else if (isAssertEqual(ast.callee)) {
+      const arg0 = this.toCode(ast.arguments[0])
+      return 'test.assert_equals(' + arg0 + ', ' + this.toCode(ast.arguments[1]) + ', "' + this.escapeString(arg0) + '")'
     } else if (matchTerm('assert.throws')) {
       return 'test.expect_error(' + this.list(ast.arguments) + ')'
     }
@@ -2855,6 +2860,10 @@ ${this.body(body.body, i, ast)}\n\n`
   },
   elseKeyword: 'else:',
   elseIfKeyword: 'elif',
+  /** @param {string} str */
+  escapeString(str) {
+    return str.replaceAll(/(?<!\\)(\\\\)*"/g, '\\"')
+  },
   ForStatement(ast, i) {
     if (isNumericalForStatement(ast)) {
       const { body, init, test, update } = ast
@@ -2901,8 +2910,6 @@ ${this.body(body.body, i)}`
       return `len(${this.toCode(ast.object)})`
     } else if (ast.property.name === 'toString') {
       return `str(${this.toCode(ast.object)})`
-    } else if (isAssertEqual(ast)) {
-      return 'test.assert_equals'
     } else {
       return generics.MemberExpression.call(this, ast, i)
     }
